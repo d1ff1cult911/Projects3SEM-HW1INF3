@@ -1,34 +1,60 @@
 #include "SmartPtr.h"
 #include <iostream>
+#include <string>
 
-struct Test {
-    int value;
-    Test(int v) : value(v) { std::cout << "Test(" << v << ") created\n"; }
-    ~Test() { std::cout << "Test(" << value << ") destroyed\n"; }
+struct Dummy {
+    std::string name;
+    Dummy(std::string n) : name(std::move(n)) {
+        std::cout << "Construct: " << name << "\n";
+    }
+    ~Dummy() {
+        std::cout << "Destruct: " << name << "\n";
+    }
 };
 
-int main() {
+void basicTests() {
+    std::cout << "\n--- Basic tests ---\n";
     {
-        SmrtPtr<Test> p1(new Test(42));
-        std::cout << "p1 use_count: " << p1.use_count() << "\n";
+        SmrtPtr<Dummy> a(new Dummy("A"));
+        SmrtPtr<Dummy> b = a;
 
-        SmrtPtr<Test> p2 = p1;
-        std::cout << "p1 use_count after copy: " << p1.use_count() << "\n";
-        std::cout << "p2 use_count: " << p2.use_count() << "\n";
-
-        SmrtPtr<Test> p3;
-        p3 = p2;
-        std::cout << "p3 use_count after assignment: " << p3.use_count() << "\n";
-
-        GetGlobalStorage<Test>().debugPrint();
-
-        std::cout << "p1 value: " << p1->value << "\n";
-        (*p2).value = 100;
-        std::cout << "p3 value after modification: " << p3->value << "\n";
+        std::cout << "use_count (a): " << a.use_count() << "\n";
+        std::cout << "use_count (b): " << b.use_count() << "\n";
     }
+    GetGlobalStorage<Dummy>().debugPrint(); // должно быть 0
+}
 
-    std::cout << "After scope, storage should be empty:\n";
-    GetGlobalStorage<Test>().debugPrint();
+void moveAndNullptrTests() {
+    std::cout << "\n--- Move and nullptr tests ---\n";
+    {
+        SmrtPtr<Dummy> a(new Dummy("X"));
+        SmrtPtr<Dummy> b = std::move(a);
+        std::cout << "a valid? " << static_cast<bool>(a) << "\n";
+        std::cout << "b valid? " << static_cast<bool>(b) << "\n";
+        b = nullptr;
+    }
+    GetGlobalStorage<Dummy>().debugPrint();
+}
 
+void arrayTests() {
+    std::cout << "\n--- Array test (custom deleter) ---\n";
+    {
+        SmrtPtr<int> arrTest(new int[4]{1, 2, 3, 4}, [](int* p){
+            std::cout << "Custom array deleter called!\n";
+            delete[] p;
+        });
+
+        for (int i = 0; i < 4; ++i)
+            std::cout << "arr[" << i << "] = " << arrTest.get()[i] << "\n";
+    }
+    GetGlobalStorage<int>().debugPrint();
+}
+
+int main() {
+    basicTests();
+    moveAndNullptrTests();
+    arrayTests();
+
+    std::cout << "\nAll tests completed.\n";
     return 0;
 }
