@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <cassert>
 #include <iostream>
+#include <functional>
 
 // ======================================================
 //  ХРАНИЛИЩЕ
@@ -29,7 +30,6 @@ public:
         auto it = refCounts.find(ptr);
         if (it != refCounts.end()) {
             if (--(it->second) == 0) {
-                delete ptr;
                 refCounts.erase(it);
             }
         }
@@ -45,13 +45,12 @@ public:
 
     void debugPrint() const {
         std::cout << "Active objects: " << refCounts.size() << "\n";
-        for (const auto& [ptr, count] : refCounts) {
-            std::cout << "  Ptr: " << ptr << ", Count: " << count << "\n";
-        }
     }
 };
 
-// Глобальный доступ к хранилищу
+// ======================================================
+//  Глобальный доступ к хранилищу
+// ======================================================
 template <typename T>
 ObjectStorage<T>& GetGlobalStorage() {
     static ObjectStorage<T> storage;
@@ -65,31 +64,43 @@ template <typename T>
 class SmrtPtr {
 private:
     T* ptr;
+    std::function<void(T*)> deleter;
 
     void addRef() {
-        if (ptr) GetGlobalStorage<T>().addRef(ptr);
+        if (ptr)
+            GetGlobalStorage<T>().addRef(ptr);
     }
 
     void release() {
         if (ptr) {
+            size_t count = GetGlobalStorage<T>().getCount(ptr);
             GetGlobalStorage<T>().release(ptr);
+            if (count == 1 && deleter)  // удаляем только когда последний владелец
+                deleter(ptr);
             ptr = nullptr;
         }
     }
 
 public:
     // Конструкторы
-    SmrtPtr() : ptr(nullptr) {}
+    SmrtPtr() : ptr(nullptr), deleter(nullptr) {}
 
-    explicit SmrtPtr(T* p) : ptr(p) {
-        if (ptr) GetGlobalStorage<T>().add(ptr);
+    explicit SmrtPtr(T* p) : ptr(p), deleter([](T* p){ delete p; }) {
+        if (ptr)
+            GetGlobalStorage<T>().add(ptr);
     }
 
-    SmrtPtr(const SmrtPtr& other) : ptr(other.ptr) {
+    SmrtPtr(T* p, std::function<void(T*)> d) : ptr(p), deleter(d) {
+        if (ptr)
+            GetGlobalStorage<T>().add(ptr);
+    }
+
+    SmrtPtr(const SmrtPtr& other) : ptr(other.ptr), deleter(other.deleter) {
         addRef();
     }
 
-    SmrtPtr(SmrtPtr&& other) noexcept : ptr(other.ptr) {
+    SmrtPtr(SmrtPtr&& other) noexcept
+        : ptr(other.ptr), deleter(std::move(other.deleter)) {
         other.ptr = nullptr;
     }
 
@@ -98,6 +109,7 @@ public:
         if (this != &other) {
             release();
             ptr = other.ptr;
+            deleter = other.deleter;
             addRef();
         }
         return *this;
@@ -107,21 +119,22 @@ public:
         if (this != &other) {
             release();
             ptr = other.ptr;
+            deleter = std::move(other.deleter);
             other.ptr = nullptr;
         }
         return *this;
     }
-    SmrtPtr& operator=(std::nullptr_t) noexcept {
-    release();
-    return *this;
-    }
 
+    SmrtPtr& operator=(std::nullptr_t) noexcept {
+        release();
+        return *this;
+    }
 
     // Деструктор
     ~SmrtPtr() { release(); }
 
     // Методы доступа
-    T& operator*() const { assert(ptr); return *ptr; }
+    T& operator*() const { return *ptr; }
     T* operator->() const { return ptr; }
     T* get() const { return ptr; }
 
