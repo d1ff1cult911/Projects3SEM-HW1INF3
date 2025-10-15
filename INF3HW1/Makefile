@@ -8,8 +8,8 @@ all: $(TARGETS)
 functional_test: functional_test.cpp SmartPtr.h
 	$(CXX) $(CXXFLAGS) -o $@ functional_test.cpp
 
-performance_test: performance_test.cpp SmartPtr.h
-	$(CXX) $(CXXFLAGS) -o $@ performance_test.cpp
+performance_test: perfomance_test.cpp SmartPtr.h
+	$(CXX) $(CXXFLAGS) -o $@ perfomance_test.cpp
 
 clean:
 	del $(TARGETS).exe 2>nul || rm -f $(TARGETS)
